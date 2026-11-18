@@ -1,29 +1,135 @@
-# Mini-Projeto 4: Base de Conhecimento do Minecraft no Memgraph
+# Mini-Projeto 4 — Base de Conhecimento do Minecraft em Grafo de Propriedades (Memgraph)
 
-Migração da base de conhecimento do Minecraft (originalmente desenvolvida em RDF/OWL e SPARQL no Mini-Projeto 3) para um modelo de **Grafo de Propriedades** persistido no **Memgraph** via Docker e consultado com **Cypher**.
+Remodelagem da ontologia OWL/RDF de itens não-blocos do **Minecraft** (desenvolvida no Mini-Projeto 3) para um **banco de dados de grafos orientado a propriedades** utilizando **Memgraph**, **Docker** e consultas em **Cypher** via Python.
 
-## Resumo do Modelo do Grafo
-
-* **Rótulos (Labels):** Representam a hierarquia de classes da ontologia original (`Item`, `Equipamento`, `Arma`, `Ferramenta`, `Armadura`, `Consumivel`, `Comida`, `Pocao`, `Material`, `MaterialCriacao`, `DropMonstro`, `Entidade`, `Monstro`). Cada nó acumula todos os rótulos de sua hierarquia (ex.: `:Arma:Equipamento:Item`).
-* **Propriedades dos Nós:** `id`, `nome`, `durabilidade`, `danoAtaque`, `tamanhoPilha`, `valorNutricional`, `raridade`, `eRenovavel`.
-* **Relacionamentos:**
-  * `(:Item)-[:REQUER_MATERIAL]->(:Material)`: Materiais necessários para fabricação.
-  * `(:Equipamento)-[:TEM_MATERIAL_REPARO]->(:Material)`: Material utilizado para reparar o equipamento.
-  * `(:Equipamento)-[:MELHORA_PARA]->(:Equipamento)`: Progressão de tier entre equipamentos.
-  * `(:Equipamento)-[:SUBSTITUI_NO_MESMO_ESPACO]->(:Equipamento)`: Relação simétrica entre equipamentos que ocupam o mesmo slot.
-  * `(:Monstro)-[:DROPA]->(:DropMonstro)` e `(:DropMonstro)-[:DROPADO_POR]->(:Monstro)`: Relação entre monstros e seus drops.
-  * `(:Pocao)-[:PREPARADO_DE]->(:Material)`: Ingrediente necessário para preparar a poção.
+---
 
 ## Estrutura do Repositório
 
-* `docker-compose.yml`: Orquestração dos containers `memgraph` e `memgraph-lab`, com volume `mg_lib` para persistência.
-* `carga.py`: Script Python que limpa o banco e cria toda a base de nós e relacionamentos do zero.
-* `consultas.py`: Aplicação Python que executa todas as consultas do Mini-Projeto 3 em Cypher, 4 consultas com travessia de múltiplos relacionamentos e os updates com verificação.
+```text
+.
+├── docker-compose.yml   # Orquestração dos containers Memgraph e Memgraph Lab
+├── carga.py             # Script de carga que recria e popula o grafo do zero
+├── consultas.py         # Aplicação Python com consultas Cypher, travessias e updates
+├── requirements.txt     # Dependências Python (driver Bolt)
+└── README.md            # Documentação do modelo e instruções de execução
+```
+
+---
+
+## Resumo do Modelo do Grafo de Propriedades
+
+A base original (31 instâncias e suas relações semânticas) foi convertida integralmente para nós, múltiplos rótulos, relacionamentos direcionados e propriedades tipadas.
+
+### 1. Rótulos dos Nós (Hierarquia de Classes)
+
+Cada nó recebe múltiplos rótulos para preservar a herança taxonômica da ontologia original:
+
+| Rótulo Raiz | Sub-rótulos Intermediários | Rótulos Específicos (Folhas) | Exemplos de Nós |
+|---|---|---|---|
+| `:Item` | `:Equipamento` | `:Arma`, `:Armadura`, `:Ferramenta` | EspadaDiamante, Elitro, PicaretaFerro |
+| `:Item` | `:Consumivel` | `:Comida`, `:Pocao` | BifeCozido, MacaDourada, PocaoForca |
+| `:Item` | `:Material` | `:MaterialCriacao`, `:DropMonstro` | Diamante, Graveto, PoBlaze, PerolaFim |
+| `:Item` | `:Entidade` | `:Monstro` | Blaze, Enderman, Ghast, Aranha |
+
+### 2. Tipos de Relacionamentos
+
+| Relacionamento | Descrição |
+|---|---|
+| `(:Item)-[:REQUER_MATERIAL]->(:Material)` | Materiais necessários para fabricar o item (navegada no sentido inverso para substituir `mc:eMaterialPara`). |
+| `(:Equipamento)-[:TEM_MATERIAL_REPARO]->(:Material)` | Material usado para reparar o equipamento na bigorna. |
+| `(:Equipamento)-[:MELHORA_PARA]->(:Equipamento)` | Progressão de tier do equipamento (consultada com comprimento variável `*1..` para transitividade). |
+| `(:Equipamento)-[:SUBSTITUI_NO_MESMO_ESPACO]->(:Equipamento)` | Relação simétrica materializada nos dois sentidos entre PeitoralFerro e Elitro. |
+| `(:Pocao)-[:PREPARADO_DE]->(:Material)` | Ingrediente base utilizado no preparo da poção. |
+| `(:Monstro)-[:DROPA]->(:DropMonstro)` e `(:DropMonstro)-[:DROPADO_POR]->(:Monstro)` | Relação bidirecional entre monstros e os itens deixados ao morrer. |
+
+### 3. Propriedades dos Nós
+
+| Categoria | Propriedades |
+|---|---|
+| Identificação | `id` (string), `nome` (string) |
+| Atributos gerais | `tamanhoPilha` (int), `raridade` (string), `eRenovavel` (boolean) |
+| Atributos específicos | `durabilidade` (int), `danoAtaque` (float), `valorNutricional` (int) |
+
+---
 
 ## Instruções de Execução
 
-1. Subir os containers Docker: `docker compose up -d` (verifique com `docker compose ps`; interface visual em `http://localhost:3000`).
-2. Instalar a dependência Python: `pip install neo4j`
-3. Carregar a base no Memgraph: `python3 carga.py`
-4. Executar as consultas e updates: `python3 consultas.py`
-5. Testar a persistência: `docker compose restart memgraph && sleep 3 && python3 consultas.py` (use `docker compose down` para parar mantendo os dados, ou `docker compose down -v` para apagar o volume).
+### 1. Pré-requisitos
+
+- Docker e Docker Compose instalados
+- Python 3.10+
+
+### 2. Subir o Memgraph e o Memgraph Lab
+
+Na raiz do projeto, inicie os containers em segundo plano:
+
+```bash
+docker compose up -d
+```
+
+Verifique se os dois serviços (`memgraph` e `memgraph-lab`) estão ativos:
+
+```bash
+docker compose ps
+```
+
+- **Endpoint Bolt (aplicação Python):** `bolt://localhost:7687`
+- **Interface Visual (Memgraph Lab):** http://localhost:3000
+
+### 3. Instalar Dependências Python
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Carregar a Base de Dados
+
+Execute o script de carga para limpar o grafo e inserir os 31 nós e 44 relacionamentos:
+
+```bash
+python carga.py
+```
+
+Saída esperada:
+
+```plaintext
+Carga concluída com sucesso! Nós: 31 | Relacionamentos: 44
+```
+
+### 5. Executar as Consultas Cypher, Travessias e Updates
+
+```bash
+python consultas.py
+```
+
+O script executa e imprime no terminal:
+
+- **Parte 1 (MP3 - P1.1 a P1.7):** equivalentes às consultas de padrão de triplas (`g.triples()`), incluindo relação inversa, transitividade e simetria.
+- **Parte 2 (MP3 - SPARQL 1 a 6):** equivalentes às consultas `SELECT`, agregação, `ASK`, `CONSTRUCT` e `OPTIONAL`.
+- **Parte 3 (TRAVESSIA 1 a 4):** 4 consultas com caminhos encadeados de 2 relacionamentos no grafo.
+- **Parte 4 (MP3 - UPDATES):** inserção de `MacaArma`, remoção de `eRenovavel` em `Elitro`, atualização de `durabilidade` em `PicaretaFerro` e consultas de verificação pós-update.
+
+> **Nota:** Como a Parte 4 modifica o estado do grafo no banco, caso deseje reexecutar as consultas sobre a base original, rode `python carga.py` novamente antes de executar `python consultas.py`.
+
+---
+
+## Teste de Persistência dos Dados
+
+O volume Docker `mg_lib` mapeia `/var/lib/memgraph` para persistir snapshots e logs (WAL) fora do container. Para validar a persistência:
+
+1. Reinicie o container do Memgraph:
+
+   ```bash
+   docker compose restart memgraph
+   ```
+
+2. Acesse o Memgraph Lab em http://localhost:3000 (ou execute uma consulta via Python) e rode:
+
+   ```cypher
+   MATCH (n) RETURN count(n);
+   ```
+
+3. O total de nós retornados permanecerá idêntico ao estado anterior ao reinício (**31** após a carga inicial ou **32** após os updates).
+
+> **Atenção:** `docker compose down` para os containers mantendo o volume `mg_lib` intacto. Utilizar `docker compose down -v` apaga o volume e remove todos os dados persistidos.
