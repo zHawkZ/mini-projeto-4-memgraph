@@ -200,17 +200,19 @@ CREATE (aranha)-[:DROPA]->(linha)
 CREATE (linha)-[:DROPADO_POR]->(aranha);
 """
 
+
 def carregar_dados():
     driver = GraphDatabase.driver(URI, auth=AUTH)
     with driver.session() as session:
         for comando in QUERY_CARGA.strip().split(";"):
             if comando.strip():
                 session.run(comando)
-        
+
         res_nos = session.run("MATCH (n) RETURN count(n) AS total").single()["total"]
         res_rels = session.run("MATCH ()-[r]->() RETURN count(r) AS total").single()["total"]
         print(f"Carga concluída com sucesso! Nós: {res_nos} | Relacionamentos: {res_rels}")
     driver.close()
+
 
 if __name__ == "__main__":
     carregar_dados()
