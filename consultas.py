@@ -3,10 +3,11 @@ from neo4j import GraphDatabase
 URI = "bolt://localhost:7687"
 AUTH = ("", "")
 
+
 def executar_consulta(session, numero, titulo, query):
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"[{numero}] {titulo}")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
     resultados = list(session.run(query))
     if not resultados:
         print("  (Nenhum resultado retornado)")
@@ -15,10 +16,11 @@ def executar_consulta(session, numero, titulo, query):
         linha = " | ".join(f"{k}: {v}" for k, v in registro.items())
         print(f"  - {linha}")
 
+
 def main():
     driver = GraphDatabase.driver(URI, auth=AUTH)
     with driver.session() as session:
-        
+
         # =====================================================================
         # PARTE 1: EQUIVALENTES ÀS CONSULTAS g.triples() DO MP3
         # =====================================================================
@@ -82,9 +84,8 @@ def main():
             session, "MP3 - P1.7",
             "Simetria: Élitro substitui PeitoralFerro?",
             """
-            RETURN EXISTS {
-                MATCH (:Equipamento {id: 'Elitro'})-[:SUBSTITUI_NO_MESMO_ESPACO]-(:Equipamento {id: 'PeitoralFerro'})
-            } AS substitui
+            OPTIONAL MATCH (e1:Equipamento {id: 'Elitro'})-[:SUBSTITUI_NO_MESMO_ESPACO]-(e2:Equipamento {id: 'PeitoralFerro'})
+            RETURN count(e1) > 0 AS substitui
             """
         )
 
@@ -108,7 +109,8 @@ def main():
             UNWIND ['Arma', 'Ferramenta', 'Armadura'] AS subclasse
             MATCH (e:Equipamento)
             WHERE subclasse IN labels(e) AND e.durabilidade IS NOT NULL
-            RETURN subclasse AS classe, count(DISTINCT e) AS total, round(avg(e.durabilidade) * 10) / 10.0 AS mediaDurabilidade
+            RETURN subclasse AS classe, count(DISTINCT e) AS total,
+                   round(avg(e.durabilidade) * 10) / 10.0 AS mediaDurabilidade
             ORDER BY mediaDurabilidade DESC
             """
         )
@@ -126,14 +128,22 @@ def main():
             session, "MP3 - SPARQL 4",
             "Existe item não-renovável Épico?",
             """
-            RETURN EXISTS {
-                MATCH (i:Item {raridade: 'Épico', eRenovavel: false})
-            } AS existeItemEpicoNaoRenovavel
+            OPTIONAL MATCH (i:Item {raridade: 'Épico', eRenovavel: false})
+            RETURN count(i) > 0 AS existeItemEpicoNaoRenovavel
             """
         )
 
         executar_consulta(
-            session, "MP3 - SPARQL 5 (q9)",
+            session, "MP3 - SPARQL 5 (CONSTRUCT)",
+            "Projeção de triplas de reparo (equivalente ao CONSTRUCT do MP3)",
+            """
+            MATCH (item:Equipamento)-[:TEM_MATERIAL_REPARO]->(material:Material)
+            RETURN item.id AS sujeito, 'podeSerReparadoCom' AS predicado, material.id AS objeto
+            """
+        )
+
+        executar_consulta(
+            session, "MP3 - SPARQL 6 (q9)",
             "Monstros, drops e poções (com OPTIONAL MATCH)",
             """
             MATCH (drop:DropMonstro)-[:DROPADO_POR]->(monstro:Monstro)
@@ -185,9 +195,9 @@ def main():
         # =====================================================================
         # PARTE 4: EQUIVALENTES AOS UPDATES DO MP3 E VERIFICAÇÃO DO EFEITO
         # =====================================================================
-        print(f"\n{'='*70}")
+        print(f"\n{'=' * 70}")
         print("[MP3 - UPDATES] Executando modificações no grafo...")
-        print(f"{'='*70}")
+        print(f"{'=' * 70}")
 
         # Update 1: Inserir Maçã de Combate (Mace)
         session.run("""
@@ -218,7 +228,7 @@ def main():
         # Verificação visível dos efeitos dos Updates na saída
         executar_consulta(
             session, "VERIFICAÇÃO PÓS-UPDATE",
-            "Confirmando efeitos dos 3 updates no Memgraph",
+            "Confirmando estado atualizado dos nós afetados no Memgraph",
             """
             MATCH (n:Item)
             WHERE n.id IN ['MacaArma', 'Elitro', 'PicaretaFerro']
@@ -227,7 +237,18 @@ def main():
             """
         )
 
+        executar_consulta(
+            session, "MP3 - SPARQL 10 (PÓS-UPDATE)",
+            "Itens 'Épico' não-renováveis após os updates (Élitro saiu, Maçã de Combate entrou)",
+            """
+            MATCH (i:Item {raridade: 'Épico', eRenovavel: false})
+            RETURN i.nome AS item
+            ORDER BY item
+            """
+        )
+
     driver.close()
+
 
 if __name__ == "__main__":
     main()
