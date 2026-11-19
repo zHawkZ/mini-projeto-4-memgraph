@@ -18,11 +18,10 @@ def main():
     driver = GraphDatabase.driver(URI, auth=AUTH)
     with driver.session() as session:
 
-        # Buscas equivalentes ao g.triples() do MP3
-        rodar(session, "Propriedades e relações da EspadaDiamante", """
+        # Equivalentes ao g.triples() e inferências OWL do MP3
+        rodar(session, "Relações saindo da EspadaDiamante", """
             MATCH (e:Item {id: 'EspadaDiamante'})-[r]->(destino)
-            RETURN labels(e) AS rotulos, properties(e) AS props,
-                   collect(type(r) + ' -> ' + destino.id) AS saidas
+            RETURN e.nome AS item, type(r) AS relacao, destino.id AS destino
         """)
 
         rodar(session, "Instâncias de Arma", """
@@ -55,7 +54,7 @@ def main():
             RETURN count(e1) > 0 AS substitui
         """)
 
-        # Consultas SPARQL do MP3 convertidas para Cypher
+        # Equivalentes às consultas SPARQL do MP3
         rodar(session, "Equipamentos com durabilidade > 500", """
             MATCH (e:Equipamento)
             WHERE e.durabilidade > 500
@@ -66,8 +65,7 @@ def main():
             UNWIND ['Arma', 'Ferramenta', 'Armadura'] AS subclasse
             MATCH (e:Equipamento)
             WHERE subclasse IN labels(e)
-            RETURN subclasse AS classe, count(e) AS total,
-                   round(avg(e.durabilidade) * 10) / 10.0 AS media
+            RETURN subclasse AS classe, count(e) AS total, round(avg(e.durabilidade)) AS media
             ORDER BY media DESC
         """)
 
@@ -115,7 +113,7 @@ def main():
         """)
 
         # Updates
-        print("\n Operações de updates")
+        print("\n> Aplicando updates...")
 
         session.run("""
             CREATE (:Arma:Equipamento:Item {
@@ -125,27 +123,17 @@ def main():
             })
         """)
 
-        session.run("""
-            MATCH (e:Item {id: 'Elitro'})
-            REMOVE e.eRenovavel
-        """)
-
-        session.run("""
-            MATCH (p:Item {id: 'PicaretaFerro'})
-            SET p.durabilidade = 300
-        """)
-
-        rodar(session, "Nós modificados após updates", """
-            MATCH (n:Item)
-            WHERE n.id IN ['MacaArma', 'Elitro', 'PicaretaFerro']
-            RETURN n.id AS id, labels(n) AS rotulos, n.nome AS nome,
-                   n.durabilidade AS durabilidade, n.eRenovavel AS eRenovavel
-        """)
+        session.run("MATCH (e:Item {id: 'Elitro'}) REMOVE e.eRenovavel")
+        session.run("MATCH (p:Item {id: 'PicaretaFerro'}) SET p.durabilidade = 300")
 
         rodar(session, "Itens Épico não-renováveis pós-update", """
             MATCH (i:Item {raridade: 'Épico', eRenovavel: false})
             RETURN i.nome AS item
-            ORDER BY item
+        """)
+
+        rodar(session, "Nova durabilidade da PicaretaFerro", """
+            MATCH (p:Item {id: 'PicaretaFerro'})
+            RETURN p.nome AS item, p.durabilidade AS durabilidade
         """)
 
     driver.close()
