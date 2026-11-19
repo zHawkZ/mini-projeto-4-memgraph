@@ -1,6 +1,5 @@
 from neo4j import GraphDatabase
 
-
 URI = "bolt://localhost:7687"
 AUTH = ("", "")
 
@@ -21,8 +20,7 @@ def main():
 
         # Buscas equivalentes ao g.triples() do MP3
         rodar(session, "Propriedades e relações da EspadaDiamante", """
-            MATCH (e:Item {id: 'EspadaDiamante'})
-            OPTIONAL MATCH (e)-[r]->(destino)
+            MATCH (e:Item {id: 'EspadaDiamante'})-[r]->(destino)
             RETURN labels(e) AS rotulos, properties(e) AS props,
                    collect(type(r) + ' -> ' + destino.id) AS saidas
         """)
@@ -67,8 +65,8 @@ def main():
         rodar(session, "Média de durabilidade por subclasse", """
             UNWIND ['Arma', 'Ferramenta', 'Armadura'] AS subclasse
             MATCH (e:Equipamento)
-            WHERE subclasse IN labels(e) AND e.durabilidade IS NOT NULL
-            RETURN subclasse AS classe, count(DISTINCT e) AS total,
+            WHERE subclasse IN labels(e)
+            RETURN subclasse AS classe, count(e) AS total,
                    round(avg(e.durabilidade) * 10) / 10.0 AS media
             ORDER BY media DESC
         """)
@@ -117,16 +115,14 @@ def main():
         """)
 
         # Updates
-        print("\n> Aplicando updates...")
+        print("\n Operações de updates")
 
         session.run("""
-            MERGE (m:Arma:Equipamento:Item {id: 'MacaArma'})
-            SET m.nome = 'Maçã de Combate (Mace)',
-                m.durabilidade = 500,
-                m.danoAtaque = 7.0,
-                m.tamanhoPilha = 1,
-                m.raridade = 'Épico',
-                m.eRenovavel = false
+            CREATE (:Arma:Equipamento:Item {
+                id: 'MacaArma', nome: 'Maçã de Combate (Mace)',
+                durabilidade: 500, danoAtaque: 7.0,
+                tamanhoPilha: 1, raridade: 'Épico', eRenovavel: false
+            })
         """)
 
         session.run("""
